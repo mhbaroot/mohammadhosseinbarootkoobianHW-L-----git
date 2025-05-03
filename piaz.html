@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>فروشگاه من</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 0;
+      direction: rtl;
+      background-color: #f7f7f7;
+    }
+
+    header {
+      background: #f2f2f2;
+      padding: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+    }
+
+    header input, header select {
+      padding: 0.5rem;
+      font-size: 1rem;
+    }
+
+    main {
+      display: flex;
+      justify-content: space-between;
+      padding: 1rem;
+    }
+
+    #products {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+      width: 70%;
+    }
+
+    aside {
+      width: 25%;
+      background: #f9f9f9;
+      padding: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+
+    .card {
+      border: 1px solid #ccc;
+      padding: 1rem;
+      background: white;
+      border-radius: 5px;
+      transition: 0.2s ease;
+    }
+
+    .card:hover {
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+
+    .card img {
+      width: 100%;
+      height: 200px;
+      object-fit: contain;
+    }
+
+    .card button {
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      background: #0a74da;
+      color: white;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    .card button:hover {
+      background: #095ab1;
+    }
+
+    #cartItems li {
+      list-style: none;
+      margin-bottom: 10px;
+      background: #fff;
+      padding: 0.5rem;
+      border-radius: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #cartItems li button {
+      background: red;
+      color: white;
+      border: none;
+      padding: 0.3rem 0.6rem;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    #cartItems li button:hover {
+      background: darkred;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>فروشگاه من</h1>
+    <input type="text" id="searchInput" placeholder="جستجو محصول..." />
+    <select id="categoryFilter"></select>
+    <input type="number" id="minPrice" placeholder="حداقل قیمت" />
+    <input type="number" id="maxPrice" placeholder="حداکثر قیمت" />
+  </header>
+
+  <main>
+    <section id="products"></section>
+    <aside>
+      <h2>سبد خرید</h2>
+      <ul id="cartItems"></ul>
+    </aside>
+  </main>
+
+  <script>
+    const apiUrl = 'https://fakestoreapi.com/products';
+    let products = [];
+    let cart = JSON.parse(localStorage.getItem('cart')) || [];
+
+    const productsContainer = document.getElementById('products');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const searchInput = document.getElementById('searchInput');
+    const minPriceInput = document.getElementById('minPrice');
+    const maxPriceInput = document.getElementById('maxPrice');
+    const cartItemsContainer = document.getElementById('cartItems');
+
+    function saveToLocalStorage() {
+      localStorage.setItem('products', JSON.stringify(products));
+      localStorage.setItem('cart', JSON.stringify(cart));
+    }
+
+    function loadProductsFromLocalStorage() {
+      const cached = localStorage.getItem('products');
+      return cached ? JSON.parse(cached) : null;
+    }
+
+    function renderCart() {
+      cartItemsContainer.innerHTML = '';
+      cart.forEach(item => {
+        const li = document.createElement('li');
+        li.textContent = item.title;
+        const btn = document.createElement('button');
+        btn.textContent = 'حذف';
+        btn.onclick = () => {
+          cart = cart.filter(i => i.id !== item.id);
+          renderCart();
+          saveToLocalStorage();
+        };
+        li.appendChild(btn);
+        cartItemsContainer.appendChild(li);
+      });
+    }
+
+    function addToCart(product) {
+      if (!cart.find(p => p.id === product.id)) {
+        cart.push(product);
+        renderCart();
+        saveToLocalStorage();
+      }
+    }
+
+    function renderProducts(list) {
+      productsContainer.innerHTML = '';
+      list.forEach(product => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <img src="${product.image}" alt="${product.title}" />
+          <h3>${product.title}</h3>
+          <p>${product.price} دلار</p>
+          <p>${product.category}</p>
+          <button>افزودن به سبد خرید</button>
+        `;
+        card.querySelector('button').onclick = () => addToCart(product);
+        productsContainer.appendChild(card);
+      });
+    }
+
+    function filterAndRender() {
+      const search = searchInput.value.toLowerCase();
+      const min = parseFloat(minPriceInput.value) || 0;
+      const max = parseFloat(maxPriceInput.value) || Infinity;
+      const category = categoryFilter.value;
+
+      const filtered = products.filter(p =>
+        p.title.toLowerCase().includes(search) &&
+        p.price >= min && p.price <= max &&
+        (category === 'all' || p.category === category)
+      );
+
+      renderProducts(filtered);
+    }
+
+    function populateCategories() {
+      const categories = [...new Set(products.map(p => p.category))];
+
+      categories.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat;
+        option.textContent = cat;
+        categoryFilter.appendChild(option);
+      });
+    }
+
+    function debounce(fn, delay) {
+      let timer;
+      return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), delay);
+      };
+    }
+
+    async function init() {
+      const cached = loadProductsFromLocalStorage();
+      if (cached) {
+        products = cached;
+        populateCategories();
+        renderProducts(products);
+      } else {
+        const res = await fetch(apiUrl);
+        products = await res.json();
+        saveToLocalStorage();
+        populateCategories();
+        renderProducts(products);
+      }
+
+      renderCart();
+    }
+
+    searchInput.addEventListener('input', debounce(filterAndRender, 400));
+    categoryFilter.addEventListener('change', filterAndRender);
+    minPriceInput.addEventListener('input', filterAndRender);
+    maxPriceInput.addEventListener('input', filterAndRender);
+
+    init();
+  </script>
+</body>
+</html>
